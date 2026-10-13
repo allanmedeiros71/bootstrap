@@ -1,0 +1,26 @@
+# boot.medeiros.cloud — atalho para o bootstrap.sh
+#
+# Recurso "Docker Compose Empty" no Coolify. O proxy do Coolify cuida do domínio
+# e do HTTPS; este Caddy só responde na porta 80 interna com um redirecionamento
+# para o bootstrap.sh no GitHub (repo público allanmedeiros71/bootstrap).
+#
+# No Coolify, em Domains do serviço "boot": https://boot.medeiros.cloud
+services:
+  boot:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ./Caddyfile
+        target: /etc/caddy/Caddyfile
+        content: |
+          {
+          	admin off
+          }
+
+          :80 {
+          	# curl -fsSL https://boot.medeiros.cloud | bash
+          	redir / https://raw.githubusercontent.com/allanmedeiros71/bootstrap/main/bootstrap.sh 302
+          	redir /bootstrap.sh https://raw.githubusercontent.com/allanmedeiros71/bootstrap/main/bootstrap.sh 302
+          	respond 404
+          }
