@@ -6,7 +6,7 @@ Primeiro passo num PC zerado (Ubuntu/Zorin/Pop, Fedora, Arch, macOS):
 curl -fsSL https://boot.medeiros.cloud | bash
 ```
 
-Instala git/curl/ssh, cria a chave SSH, cadastra a chave no GitHub com login pelo navegador ou pelo celular, clona o repo privado `scripts` em `~/git/scripts` e entrega a vez ao `pos-install.sh`, que chama o chezmoi.
+Instala git/curl/ssh, cria a chave SSH, cadastra a chave no GitHub com login pelo navegador ou pelo celular, clona o repo privado `scripts` em `~/Projects/scripts` e entrega a vez ao `pos-install.sh`, que chama o chezmoi.
 
 ```sh
 curl -fsSL https://boot.medeiros.cloud | bash -s -- --dry-run            # só mostra

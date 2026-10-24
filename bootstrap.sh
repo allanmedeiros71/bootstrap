@@ -11,7 +11,7 @@
 #   2. chave SSH (~/.ssh/id_ed25519), carregada no ssh-agent
 #   3. cadastro da chave no GitHub com o gh — login pelo navegador ou pelo celular,
 #      sem copiar e colar a chave
-#   4. clone de allanmedeiros71/scripts em ~/git/scripts
+#   4. clone de allanmedeiros71/scripts em ~/Projects/scripts
 #   5. exec pos-install.sh com os argumentos recebidos (ele chama o chezmoi)
 #
 # Opções próprias (as demais vão para o pos-install.sh):
@@ -22,14 +22,14 @@
 # Variáveis de ambiente:
 #   GH_TOKEN      token do GitHub com escopo admin:public_key — pula o login (testes, automação)
 #   SCRIPTS_REPO  padrão git@github.com:allanmedeiros71/scripts.git
-#   SCRIPTS_DIR   padrão ~/git/scripts (o chezmoi espera o repo ali)
+#   SCRIPTS_DIR   padrão ~/Projects/scripts (o chezmoi espera o repo ali)
 #
 # ARQUIVO PÚBLICO: nada de segredo aqui.
 
 set -euo pipefail
 
 SCRIPTS_REPO="${SCRIPTS_REPO:-git@github.com:allanmedeiros71/scripts.git}"
-SCRIPTS_DIR="${SCRIPTS_DIR:-$HOME/git/scripts}"
+SCRIPTS_DIR="${SCRIPTS_DIR:-$HOME/Projects/scripts}"
 KEY="$HOME/.ssh/id_ed25519"
 
 DRY_RUN=false
@@ -264,6 +264,12 @@ register_key() {
 # ---------------------------------------------------------------------------
 clone_scripts() {
     title "Repositório de scripts"
+    # Máquina de antes da troca de ~/git por ~/Projects: usa o clone antigo, e o chezmoi
+    # move a pasta inteira (run_once_before_00-git-para-projects.sh) sem clonar outra cópia
+    if [ ! -e "$SCRIPTS_DIR" ] && [ -d "$HOME/git/scripts/.git" ]; then
+        SCRIPTS_DIR="$HOME/git/scripts"
+        info "Clone em ~/git/scripts: o chezmoi move ~/git para ~/Projects"
+    fi
     if [ -d "$SCRIPTS_DIR/.git" ]; then
         if run git -C "$SCRIPTS_DIR" pull --ff-only --quiet; then
             ok "Atualizado: $SCRIPTS_DIR"
