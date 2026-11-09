@@ -14,6 +14,10 @@
 #   4. clone de allanmedeiros71/scripts em ~/Projects/scripts
 #   5. exec pos-install.sh com os argumentos recebidos (ele chama o chezmoi)
 #
+# Android (Termux): mesmas etapas 1 a 3 com o pkg (sem sudo), e no lugar das 4 e 5 o
+# chezmoi init --apply direto, que usa o perfil android dos dotfiles. O pos-install.sh é
+# de desktop e o repo scripts não vai para o celular.
+#
 # Opções próprias (as demais vão para o pos-install.sh):
 #   --bootstrap-only   para depois do clone, sem rodar o pos-install.sh
 #   -n, --dry-run      mostra o que faria; com o repo já clonado, roda o pos-install.sh --dry-run
@@ -23,6 +27,7 @@
 #   GH_TOKEN      token do GitHub com escopo admin:public_key — pula o login (testes, automação)
 #   SCRIPTS_REPO  padrão git@github.com:allanmedeiros71/scripts.git
 #   SCRIPTS_DIR   padrão ~/Projects/scripts (o chezmoi espera o repo ali)
+#   DOTFILES_REPO padrão git@github.com:allanmedeiros71/dotfiles.git (só no Android)
 #
 # ARQUIVO PÚBLICO: nada de segredo aqui.
 
@@ -30,6 +35,7 @@ set -euo pipefail
 
 SCRIPTS_REPO="${SCRIPTS_REPO:-git@github.com:allanmedeiros71/scripts.git}"
 SCRIPTS_DIR="${SCRIPTS_DIR:-$HOME/Projects/scripts}"
+DOTFILES_REPO="${DOTFILES_REPO:-git@github.com:allanmedeiros71/dotfiles.git}"
 KEY="$HOME/.ssh/id_ed25519"
 
 DRY_RUN=false
@@ -54,6 +60,14 @@ run() {
 
 interactive() { [ "$TTY" = /dev/tty ]; }
 
+# No Termux o $USER costuma não existir e o uname -n é "localhost": usa o modelo do aparelho
+me()        { printf '%s' "${USER:-$(id -un)}"; }
+host_name() {
+    local model=""
+    [ "${OS:-}" = android ] && model=$(getprop ro.product.model 2>/dev/null | tr ' ' '-')
+    printf '%s' "${model:-$(uname -n)}"
+}
+
 pause() {  # pause "mensagem"
     printf '  %s ' "$1"
     read -r _ <"$TTY" || true
@@ -76,6 +90,10 @@ cleanup() { [ -n "$TMP" ] && rm -rf "$TMP"; TMP=""; }
 
 detect_os() {
     if [ "$(uname -s)" = Darwin ]; then echo macos; return; fi
+    # Termux: não há /etc/os-release; o $TERMUX_VERSION vem do app, o $PREFIX é o do Termux
+    case "${TERMUX_VERSION:-}:${PREFIX:-}" in
+        ?*:* | *:*/com.termux/*) echo android; return ;;
+    esac
     [ -r /etc/os-release ] || die "/etc/os-release não encontrado"
     local id
     for id in $(. /etc/os-release; echo "$ID ${ID_LIKE:-}"); do
@@ -111,8 +129,18 @@ install_prereqs() {
         return
     fi
 
+    if [ "$OS" = android ]; then
+        # gh e chezmoi também: o binário do gh da release é de Linux, e o chezmoi vem a seguir
+        if has git && has curl && has ssh && has ssh-keygen && has gh && has chezmoi; then
+            ok "Já instalados"; return
+        fi
+        run pkg install -y git curl openssh gh chezmoi
+        $DRY_RUN || ok "git, curl, ssh, gh e chezmoi instalados"
+        return
+    fi
+
     if has git && has curl && has ssh && has ssh-keygen; then ok "Já instalados"; return; fi
-    has sudo || die "sudo não encontrado — instale-o e adicione $USER ao grupo de administradores"
+    has sudo || die "sudo não encontrado — instale-o e adicione $(me) ao grupo de administradores"
     case "$OS" in
         debian)
             run sudo apt-get update -qq
@@ -139,23 +167,26 @@ ensure_key() {
         ok "Usando $KEY"
     elif interactive; then
         info "Escolha uma senha para a chave (Enter deixa sem senha)"
-        run ssh-keygen -q -t ed25519 -C "$USER@$(uname -n)" -f "$KEY" <"$TTY"
+        run ssh-keygen -q -t ed25519 -C "$(me)@$(host_name)" -f "$KEY" <"$TTY"
     else
-        run ssh-keygen -q -t ed25519 -C "$USER@$(uname -n)" -f "$KEY" -N ""
+        run ssh-keygen -q -t ed25519 -C "$(me)@$(host_name)" -f "$KEY" -N ""
     fi
     $DRY_RUN && return
 
     # No agente, a senha digitada uma vez vale para o clone e para o chezmoi
     # (o pos-install.sh herda o SSH_AUTH_SOCK)
     if [ -z "${SSH_AUTH_SOCK:-}" ]; then
-        eval "$(ssh-agent -s)" >/dev/null
+        # O OpenSSH 10.1+ cria o socket em ~/.ssh/agent/ e não cria a pasta (visto no Termux)
+        mkdir -p -m 700 "$HOME/.ssh/agent"
+        eval "$(ssh-agent -s)" >/dev/null || true
     fi
     local fp
     fp=$(ssh-keygen -lf "$KEY.pub" | awk '{print $2}')
-    if ! ssh-add -l 2>/dev/null | grep -qF "$fp"; then
-        ssh-add -q "$KEY" <"$TTY" || warn "Não foi possível carregar a chave no ssh-agent"
+    if ssh-add -l 2>/dev/null | grep -qF "$fp" || ssh-add -q "$KEY" <"$TTY"; then
+        ok "Chave no ssh-agent"
+    else
+        warn "Não foi possível carregar a chave no ssh-agent"
     fi
-    ok "Chave no ssh-agent"
 }
 
 # ---------------------------------------------------------------------------
@@ -243,7 +274,7 @@ register_key() {
     fi
 
     local key_title
-    key_title="$(uname -n) ($(date +%Y-%m-%d))"
+    key_title="$(host_name) ($(date +%Y-%m-%d))"
     if ! "$GH" ssh-key add "$KEY.pub" --title "$key_title"; then
         [ -n "${GH_TOKEN:-}" ] && die "O GH_TOKEN precisa do escopo admin:public_key"
         info "O login atual não pode cadastrar chaves — pedindo o escopo admin:public_key"
@@ -286,6 +317,28 @@ clone_scripts() {
 }
 
 # ---------------------------------------------------------------------------
+# 4 e 5 no Android: dotfiles direto pelo chezmoi
+# ---------------------------------------------------------------------------
+android_dotfiles() {
+    title "Dotfiles (chezmoi, perfil android)"
+    local src="$HOME/.local/share/chezmoi"
+    if [ -d "$src/.git" ]; then
+        run chezmoi update --no-tty --force
+    else
+        run chezmoi init --apply --no-tty --force "$DOTFILES_REPO"
+    fi
+    $DRY_RUN && return
+    ok "Dotfiles aplicados"
+
+    title "Pronto"
+    info "Abra uma nova sessão do Termux para entrar no zsh."
+    [ -f "$HOME/.config/chezmoi/key.txt" ] ||
+        info "Segredos: copie a chave age (Bitwarden) para ~/.config/chezmoi/key.txt e rode chezmoi apply."
+    info "Chave pública deste aparelho (para o authorized_keys do VPS):"
+    info "$(cat "$KEY.pub")"
+}
+
+# ---------------------------------------------------------------------------
 # Principal
 # ---------------------------------------------------------------------------
 main() {
@@ -311,6 +364,11 @@ main() {
     install_prereqs
     ensure_key
     register_key
+    if [ "$OS" = android ]; then
+        cleanup
+        android_dotfiles
+        exit 0
+    fi
     clone_scripts
     cleanup
 

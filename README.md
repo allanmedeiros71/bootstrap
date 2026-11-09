@@ -1,7 +1,7 @@
 # bootstrap
 
 One command to take a fresh machine from zero to my working setup on
-Ubuntu, Zorin, Pop!_OS, Fedora, Arch or macOS:
+Ubuntu, Zorin, Pop!_OS, Fedora, Arch, macOS or Android (Termux):
 
 ```sh
 curl -fsSL https://boot.medeiros.cloud | bash
@@ -21,6 +21,14 @@ curl -fsSL https://boot.medeiros.cloud | bash
 curl | bash  ──►  bootstrap.sh  ──►  scripts/pos-install.sh  ──►  chezmoi (dotfiles)
 ```
 
+### Android (Termux)
+
+Install Termux from F-Droid or GitHub, not the Play Store, and run the same command.
+Steps 1 to 3 use `pkg` (no `sudo`) and also install `gh` and `chezmoi`. Steps 4 and 5
+are replaced by `chezmoi init --apply` of my dotfiles, whose `android` profile keeps
+only the shell and CLI tools. The SSH key is named after the device model, and the
+script prints the public key at the end so it can be added to my VPS.
+
 ## Options
 
 ```sh
@@ -34,6 +42,7 @@ curl -fsSL https://boot.medeiros.cloud | bash -s -- --bootstrap-only     # stop 
 | `GH_TOKEN`     | Token with `admin:public_key`, skips the interactive login       |
 | `SCRIPTS_REPO` | Repository to clone (default `git@github.com:allanmedeiros71/scripts.git`) |
 | `SCRIPTS_DIR`  | Clone target (default `~/Projects/scripts`)                      |
+| `DOTFILES_REPO` | Dotfiles repository, Android only (default `git@github.com:allanmedeiros71/dotfiles.git`) |
 
 The script reads interactive input from `/dev/tty`, so prompts work even
 though it arrives through a pipe.
