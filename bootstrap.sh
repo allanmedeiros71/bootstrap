@@ -130,6 +130,10 @@ install_prereqs() {
     fi
 
     if [ "$OS" = android ]; then
+        # Upgrade completo sempre, antes de tudo: no Termux, instalar com a base desatualizada
+        # traz a libcurl nova com a openssl antiga e quebra o curl (e o próprio pkg).
+        # Também conserta um aparelho que já ficou assim. force-confnew: sem perguntas
+        run pkg upgrade -y -o Dpkg::Options::=--force-confnew
         # gh e chezmoi também: o binário do gh da release é de Linux, e o chezmoi vem a seguir
         if has git && has curl && has ssh && has ssh-keygen && has gh && has chezmoi; then
             ok "Já instalados"; return
